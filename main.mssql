@@ -1,0 +1,76 @@
+-- AJUSTES INICIAIS
+
+---incluir dado no db
+--ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" poligonos_sat.shp -nlt MULTIPOLYGON -lco precision=YES
+
+-- Identificar qual é a projeção do dado
+Select St_srid(wkb_geometry) from public.poligonos_sat
+Select * from public.poligonos_sat
+
+
+-- Eu já transformei a projeção do dado para EPSG: 4326 e 
+-- agora estou apenas mudando o nome da coluna wkb_geometry
+ALTER TABLE public.poligonos_sat RENAME  wkb_geometry TO geom;
+Select St_srid(geom) from public.poligonos_sat
+
+-- Alterando o nome da coluna id
+ALTER TABLE public.poligonos_sat RENAME  id TO id_pct;
+
+-- Copiando a tabela para o esquema 'dados_brutos'
+DROP TABLE IF EXISTS dados_brutos.poligonos_sat; 
+CREATE TABLE dados_brutos.poligonos_sat AS
+select *
+from public.poligonos_sat
+
+select * FROM dados_brutos.poligonos_sat
+Select St_srid(geom) from public.poligonos_sat
+
+--- Quais pct estao localizados na regiao do MATOPIBA (alguma intersecção)
+DROP TABLE IF EXISTS public.pct_matopiba; 
+CREATE TABLE public.pct_matopiba AS
+SELECT DISTINCT
+c.id_pct
+FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct) c	
+INNER JOIN (SELECT * FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)) d
+ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
+RIGHT JOIN public.lista_cdmun_matopiba e ON d.cd_mun = e.cd_mun
+
+
+--- QUERY PARA SUMARIZAR CATEGORIA FUNDIÁRIA
+DROP TABLE IF EXISTS public.pct_categoriafundiaria; 
+CREATE TABLE public.pct_categoriafundiaria AS
+WITH catfund_pctbr AS 
+(SELECT
+a.id_pct,
+b.nm_cat_fund,
+sum(ST_Area(ST_intersection(a.geom, b.geom)::geography)/10000) area_grupo_fundiario_ha
+FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct) a	
+INNER JOIN (SELECT * FROM malhav2.proc6_malha WHERE NOT is_massadagua) b
+ON  ST_Intersects(ST_makevalid(a.geom), b.geom)
+GROUP BY a.id_pct, b.nm_cat_fund
+UNION ALL
+SELECT
+c.id_pct,
+'massa_dagua' nm_cat_fund,
+sum(ST_Area(ST_intersection(c.geom, d.geom)::geography)/10000) area_grupo_fundiario_ha
+FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct) c	
+INNER JOIN (SELECT * FROM malhav2.proc6_malha WHERE is_massadagua) d
+ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
+GROUP BY c.id_pct, d.nm_cat_fund)
+SELECT 
+id_pct,
+nm_cat_fund,
+area_grupo_fundiario_ha
+FROM catfund_pctbr
+WHERE id_pct in (SELECT id_pct FROM public.pct_matopiba )
+
+
+--- AREA DE CADA PCT
+SELECT
+d.id_pct,
+'area_pct' nm_cat_fund,
+sum(ST_Area((d.geom)::geography)/10000) area_grupo_fundiario_ha
+FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct) as d
+WHERE d.id_pct in (SELECT id_pct FROM public.pct_categoriafundiaria )
+GROUP BY d.id_pct
+
