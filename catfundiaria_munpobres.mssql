@@ -1,0 +1,107 @@
+
+
+SELECT sum(ST_Area((ST_makevalid(geom))::geography)/10000) 
+FROM malhav2.proc6_malha
+where cd_mun = 1707553
+
+
+DROP TABLE IF EXISTS public.sat_catfund_mun_matopiba; 
+CREATE TABLE public.sat_catfund_mun_matopiba AS
+SELECT
+a.cd_mun,
+a.nm_cat_fund,
+sum(ST_Area((ST_makevalid(a.geom))::geography)/10000) area_grupo_fundiario_ha
+FROM (SELECT * FROM malhav2.proc6_malha WHERE NOT is_massadagua) as a	
+INNER JOIN (select cd_mun from public.lista_cdmun_matopiba) as d ON a.cd_mun = d.cd_mun
+GROUP BY a.cd_mun, a.nm_cat_fund 
+UNION ALL
+SELECT
+b.cd_mun,
+'massa_dagua' nm_cat_fund,
+sum(ST_Area((ST_makevalid(b.geom))::geography)/10000) area_grupo_fundiario_ha
+FROM (SELECT * FROM malhav2.proc6_malha WHERE is_massadagua) as b
+INNER JOIN (select cd_mun from public.lista_cdmun_matopiba) as c ON b.cd_mun = c.cd_mun
+GROUP BY b.cd_mun, b.nm_cat_fund
+
+
+select * FROM public.sat_catfund_mun_matopiba where cd_mun = 1712157 
+
+---- AF ----
+DROP TABLE IF EXISTS public.sat_pobreaf_categoriafundiaria; 
+CREATE TABLE public.sat_pobreaf_categoriafundiaria AS
+SELECT 
+a.cd_mun,
+a.nm_cat_fund,
+a.area_grupo_fundiario_ha
+FROM public.sat_catfund_mun_matopiba as a
+INNER JOIN (select cd_mun from public.sat_af_munipobres WHERE is_pobre = 1) as b ON a.cd_mun = b.cd_mun
+GROUP BY a.cd_mun, a.nm_cat_fund, a.area_grupo_fundiario_ha
+
+select * FROM public.sat_pobreaf_categoriafundiaria where cd_mun = 1712157 
+
+
+select a.cd_mun, b.nm_mun, b.sigla, a.nm_cat_fund, a.area_grupo_fundiario_ha FROM public.sat_pobreaf_categoriafundiaria as a
+left join geo_adm.pa_br_limitemunicipal_250_2015_ibge_4674 as b 
+on a.cd_mun = b.cd_mun::int
+group by a.cd_mun, b.nm_mun, b.sigla, a.nm_cat_fund, a.area_grupo_fundiario_ha
+
+
+select * from public.sat_pobreaf_categoriafundiaria limit 10
+
+-- MF
+DROP TABLE IF EXISTS public.sat_pobremf_categoriafundiaria; 
+CREATE TABLE public.sat_pobremf_categoriafundiaria AS
+SELECT 
+a.cd_mun,
+a.nm_cat_fund,
+a.area_grupo_fundiario_ha
+FROM public.sat_catfund_mun_matopiba as a
+INNER JOIN (select cd_mun from public.sat_mf_munipobres WHERE is_pobre = 1) as b ON a.cd_mun = b.cd_mun
+GROUP BY a.cd_mun, a.nm_cat_fund, a.area_grupo_fundiario_ha
+
+select * FROM public.sat_pobremf_categoriafundiaria where cd_mun = 1712157 
+
+select a.cd_mun, b.nm_mun, b.sigla, a.nm_cat_fund, a.area_grupo_fundiario_ha FROM public.sat_pobremf_categoriafundiaria as a
+left join geo_adm.pa_br_limitemunicipal_250_2015_ibge_4674 as b 
+on a.cd_mun = b.cd_mun::int
+group by a.cd_mun, b.nm_mun, b.sigla, a.nm_cat_fund, a.area_grupo_fundiario_ha
+
+
+-- 3cat
+DROP TABLE IF EXISTS public.sat_pobre3cat_categoriafundiariav2; 
+CREATE TABLE public.sat_pobre3cat_categoriafundiariav2 AS
+SELECT 
+a.cd_mun,
+a.nm_cat_fund,
+a.area_grupo_fundiario_ha
+FROM public.sat_catfund_mun_matopiba as a
+INNER JOIN (select cd_mun from public.sat_3cat_munipobres WHERE is_pobre = 1) as b ON a.cd_mun = b.cd_mun
+GROUP BY a.cd_mun, a.nm_cat_fund, a.area_grupo_fundiario_ha
+
+select * FROM public.sat_pobre3cat_categoriafundiaria where cd_mun = 1712157 
+
+select a.cd_mun, b.nm_mun, b.sigla, a.nm_cat_fund, a.area_grupo_fundiario_ha FROM public.sat_pobre3cat_categoriafundiariav2 as a
+left join geo_adm.pa_br_limitemunicipal_250_2015_ibge_4674 as b 
+on a.cd_mun = b.cd_mun::int
+group by a.cd_mun, b.nm_mun, b.sigla, a.nm_cat_fund, a.area_grupo_fundiario_ha
+
+
+-- 6cat
+DROP TABLE IF EXISTS public.sat_pobre6cat_categoriafundiaria; 
+CREATE TABLE public.sat_pobre6cat_categoriafundiaria AS
+SELECT 
+a.cd_mun,
+a.nm_cat_fund,
+a.area_grupo_fundiario_ha
+FROM public.sat_catfund_mun_matopiba as a
+INNER JOIN (select cd_mun from public.sat_6cat_munipobres WHERE is_pobre = 1) as b ON a.cd_mun = b.cd_mun
+GROUP BY a.cd_mun, a.nm_cat_fund, a.area_grupo_fundiario_ha
+
+select * FROM public.sat_pobre6cat_categoriafundiaria where cd_mun = 1712157 
+
+select a.cd_mun, b.nm_mun, b.sigla, a.nm_cat_fund, a.area_grupo_fundiario_ha FROM public.sat_pobre6cat_categoriafundiaria as a
+left join geo_adm.pa_br_limitemunicipal_250_2015_ibge_4674 as b 
+on a.cd_mun = b.cd_mun::int
+group by a.cd_mun, b.nm_mun, b.sigla, a.nm_cat_fund, a.area_grupo_fundiario_ha
+
+
