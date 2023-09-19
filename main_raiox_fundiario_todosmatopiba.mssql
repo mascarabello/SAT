@@ -1,0 +1,21 @@
+
+
+DROP TABLE IF EXISTS malhav2.proc6_malha_matopiba_es; 
+CREATE TABLE malhav2.proc6_malha_matopiba_es AS
+SELECT * FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+
+
+SELECT * FROM malhav2.proc6_malha_matopiba_es LIMIT 10
+
+select
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha_matopiba_es
+group by cd_uf, nm_cat_fund
+
+select
+nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha_matopiba_es
+group by nm_cat_fund
