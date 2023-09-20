@@ -1,0 +1,35 @@
+-- AJUSTES INICIAIS
+
+---incluir dado no db
+--ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Dropbox/Work/GPP/SAT/cd2022_tquilombolas_esmatopiba_epsg4326.shp -nlt MULTIPOLYGON -lco precision=YES
+
+
+-- Identificar qual é a projeção do dado
+Select St_srid(wkb_geometry) from public.cd2022_tquilombolas_esmatopiba_epsg4326
+
+Select * from public.cd2022_tquilombolas_esmatopiba_epsg4326 limit 10
+Select distinct sg_uf from public.cd2022_tquilombolas_esmatopiba_epsg4326
+
+-- Eu já transformei a projeção do dado para EPSG: 4326 e 
+-- agora estou apenas mudando o nome da coluna wkb_geometry
+ALTER TABLE public.cd2022_tquilombolas_esmatopiba_epsg4326 RENAME  wkb_geometry TO geom;
+Select St_srid(geom) from public.cd2022_tquilombolas_esmatopiba_epsg4326
+
+-- Alterando o nome da coluna id
+ALTER TABLE public.cd2022_tquilombolas_esmatopiba_epsg4326 RENAME  id TO id_pct;
+
+--- Quais pct estao localizados nos estados da região do MATOPIBA (alguma intersecção)
+DROP TABLE IF EXISTS public.tq_matopiba; 
+CREATE TABLE public.tq_matopiba AS
+SELECT DISTINCT
+c.cod_tq,
+d.cd_mun
+FROM (SELECT cod_tq, ST_MakeValid(ST_Union(geom)) geom  FROM public.cd2022_tquilombolas_esmatopiba_epsg4326 GROUP BY cod_tq) c	
+INNER JOIN (SELECT cd_mun, ST_MakeValid(geom) AS geom FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)) d
+ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
+WHERE ST_Area(ST_Intersection(ST_makevalid(c.geom),d.geom)) / ST_Area(ST_makevalid(c.geom)) > 0.10
+group by c.cod_tq, d.cd_mun
+
+
+
+
