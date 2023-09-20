@@ -1,0 +1,187 @@
+
+
+-- PARTE 1 : ADICIONANDO OS DADOS NO BANCO
+--- 1 ) DADO DE PCT (tonomapa)
+---incluir dado no db
+--ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" poligonos_sat.shp -nlt MULTIPOLYGON -lco precision=YES
+
+-- Identificar qual é a projeção do dado
+Select St_srid(wkb_geometry) from public.poligonos_sat
+Select * from public.poligonos_sat
+
+-- Eu já transformei a projeção do dado para EPSG: 4326 e 
+-- agora estou apenas mudando o nome da coluna wkb_geometry
+ALTER TABLE public.poligonos_sat RENAME  wkb_geometry TO geom;
+Select St_srid(geom) from public.poligonos_sat
+
+-- Alterando o nome da coluna id
+ALTER TABLE public.poligonos_sat RENAME  id TO id_pct;
+
+-- Copiando a tabela para o esquema 'dados_brutos'
+DROP TABLE IF EXISTS dados_brutos.poligonos_sat; 
+CREATE TABLE dados_brutos.poligonos_sat AS
+select *
+from public.poligonos_sat
+
+select * FROM dados_brutos.poligonos_sat
+Select St_srid(geom) from public.poligonos_sat
+
+---- 2) TERRITORIOS QUILOMBOLAS (FONTE : CENSO 2022) 
+---incluir dado no db
+--ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Dropbox/Work/GPP/SAT/cd2022_tquilombolas_esmatopiba_epsg4326.shp -nlt MULTIPOLYGON -lco precision=YES
+
+-- Identificar qual é a projeção do dado
+Select St_srid(wkb_geometry) from public.cd2022_tquilombolas_esmatopiba_epsg4326
+
+Select * from public.cd2022_tquilombolas_esmatopiba_epsg4326 limit 10
+Select distinct sg_uf from public.cd2022_tquilombolas_esmatopiba_epsg4326
+
+-- Eu já transformei a projeção do dado para EPSG: 4326 e 
+-- agora estou apenas mudando o nome da coluna wkb_geometry
+ALTER TABLE public.cd2022_tquilombolas_esmatopiba_epsg4326 RENAME  wkb_geometry TO geom;
+Select St_srid(geom) from public.cd2022_tquilombolas_esmatopiba_epsg4326
+
+-- Alterando o nome da coluna id
+ALTER TABLE public.cd2022_tquilombolas_esmatopiba_epsg4326 RENAME  id TO id_pct;
+
+
+
+
+--- 3) FUNDO E FECHO DE PASTO
+-- incluir dado no db (AQUI SÃO SO OS MUNICÍPIOS QUE PERTENCEM )
+-- ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Dropbox/Work/GPP/SAT/input/ctradicionais_ffp_corrigido.shp -nlt POINT -lco precision=YES
+-- Identificar qual é a projeção do dado
+Select St_srid(wkb_geometry) from public.ctradicionais_ffp_corrigido
+
+Select * from public.ctradicionais_ffp_corrigido limit 10
+Select distinct sg_uf from public.ctradicionais_ffp_corrigido
+
+-- Eu já transformei a projeção do dado para EPSG: 4326 e 
+-- agora estou apenas mudando o nome da coluna wkb_geometry
+ALTER TABLE public.ctradicionais_ffp_corrigido RENAME  wkb_geometry TO geom;
+Select St_srid(geom) from public.ctradicionais_ffp_corrigido
+
+-- Alterando o nome da coluna id
+ALTER TABLE public.ctradicionais_ffp_corrigido RENAME  ogc_fid TO id_ffp;
+
+-- EXISTE ALGUNS PONTOS DUPLICADOS, MAS COMO NÃO TEM COMO CORRIGIR, VOU CONSIDERAR O DADO BRUTO.
+/* --- criando id baseado na latitude e longitude
+ALTER TABLE public.ctradicionais_ffp_corrigido
+ADD COLUMN lat_lon_concat TEXT;
+
+UPDATE public.ctradicionais_ffp_corrigido
+SET lat_lon_concat = CONCAT(latitude, '_', longitude);
+
+ALTER TABLE public.ctradicionais_ffp_corrigido
+ADD COLUMN unique_id SERIAL ;
+
+-- Atualize o ID único baseado na combinação de latitude e longitude
+WITH cte AS (
+    SELECT DISTINCT lat_lon_concat
+    FROM public.ctradicionais_ffp_corrigido
+)
+UPDATE public.ctradicionais_ffp_corrigido t
+SET unique_id = u.id
+FROM (
+    SELECT lat_lon_concat, ROW_NUMBER() OVER (ORDER BY lat_lon_concat) AS id
+    FROM cte
+) u
+WHERE t.lat_lon_concat = u.lat_lon_concat;
+*/
+
+
+--- PARTE 2) PROCESSAMENTO : SELECIONANDO MUNICÍPIOS AOS QUAIS OS TERRITORIOS DE INTERESSE PERTENCEM
+--- Selecionar PCTs e seus respectivos municípios localizados nos estados da região do MATOPIBA (alguma intersecção.
+--- Não estamos considerando os PCTs quilombolas, já que teremos uma base só para estes territórios
+DROP TABLE IF EXISTS public.pct_matopiba; 
+CREATE TABLE public.pct_matopiba AS
+SELECT DISTINCT
+c.id_pct,
+d.cd_mun,
+ST_Area(ST_Intersection(ST_makevalid(c.geom),d.geom)) / ST_Area(ST_makevalid(c.geom)) as prop
+FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat WHERE out_segmen != 'Quilombolas' GROUP BY id_pct) c	
+INNER JOIN (SELECT cd_mun, ST_MakeValid(ST_Union(geom)) AS geom FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) GROUP BY cd_mun) d
+ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
+group by c.id_pct, d.cd_mun, prop
+
+
+--- Quais territórios quilombolas estão localizados nos estados da região do MATOPIBA (alguma intersecção)
+DROP TABLE IF EXISTS public.tq_matopiba; 
+CREATE TABLE public.tq_matopiba AS
+SELECT DISTINCT
+c.cod_tq,
+d.cd_mun,
+ST_Area(ST_Intersection(ST_makevalid(c.geom),d.geom)) / ST_Area(ST_makevalid(c.geom)) as prop
+FROM (SELECT cod_tq, ST_MakeValid(ST_Union(geom)) geom  FROM public.cd2022_tquilombolas_esmatopiba_epsg4326 GROUP BY cod_tq) c	
+INNER JOIN (SELECT cd_mun, ST_MakeValid(ST_Union(geom)) AS geom FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) group by cd_mun) d
+ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
+group by c.cod_tq, d.cd_mun, prop
+
+--- Quais associacoes de ffp estão localizados nos estados da região do MATOPIBA (alguma intersecção)
+-- tempo : 15 min
+DROP TABLE IF EXISTS public.ffp_matopiba; 
+CREATE TABLE public.ffp_matopiba AS
+SELECT DISTINCT
+c.id_ffp,
+d.cd_mun
+FROM (SELECT id_ffp, ST_MakeValid(ST_Union(geom)) geom  FROM public.ctradicionais_ffp_corrigido GROUP BY id_ffp) c	
+INNER JOIN (SELECT cd_mun, ST_MakeValid(ST_Union(geom)) AS geom FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (29) group by cd_mun) d
+ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
+group by c.id_ffp, d.cd_mun
+
+select count(distinct id_pct) from public.pct_matopiba  limit 10
+select * from public.pct_matopiba 
+select * from public.tq_matopiba  limit 10
+
+
+DROP TABLE IF EXISTS public.mun_territorios_matopiba; 
+CREATE TABLE public.mun_territorios_matopiba AS
+SELECT DISTINCT cd_mun, id_pct::int AS id, 'pct' AS fonte
+FROM public.pct_matopiba 
+WHERE prop > 0.20
+GROUP BY cd_mun, id_pct
+UNION
+-- territorios quilombolas
+SELECT DISTINCT cd_mun, cod_tq::int AS id, 'tq' AS fonte
+FROM public.tq_matopiba 
+WHERE prop > 0.20 
+GROUP BY cd_mun, cod_tq
+UNION
+-- fft
+SELECT DISTINCT cd_mun, id_ffp::int AS id, 'fft' AS fonte 
+FROM public.ffp_matopiba
+GROUP BY cd_mun, id_ffp
+
+
+select DISTINCT cd_mun from public.mun_territorios_matopiba
+
+
+--- calcular o raio-x fundiario dos municípios em que os territórios quilombolas estão
+
+DROP TABLE IF EXISTS public.territorios_categoriafundiaria; 
+CREATE TABLE public.territorios_categoriafundiaria AS
+select * 
+FROM malhav2.proc6_malha
+WHERE cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopiba)
+
+WITH catfund_mun AS 
+(SELECT
+cd_mun,
+nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM public.territorios_categoriafundiaria WHERE NOT is_massadagua
+GROUP BY cd_mun, nm_cat_fund
+UNION ALL
+SELECT
+cd_mun,
+'massa_dagua' nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+ FROM public.territorios_categoriafundiaria WHERE is_massadagua
+GROUP BY cd_mun, nm_cat_fund)
+select 
+nm_cat_fund,
+sum(area_grupo_fundiario_ha) as area_final_ha
+from catfund_mun
+GROUP BY nm_cat_fund
+ 
+ 
