@@ -1,5 +1,35 @@
 
 
+--- raio x fundiário de todos os estados 'juntos'
+SELECT
+nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha_matopiba_es WHERE NOT is_massadagua
+GROUP BY nm_cat_fund
+UNION ALL
+SELECT
+'massa_dagua' nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha_matopiba_es WHERE is_massadagua
+GROUP BY nm_cat_fund
+
+--- raio x fundiário de todos os estados 'juntos'
+
+SELECT
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha_matopiba_es WHERE NOT is_massadagua
+GROUP BY cd_uf, nm_cat_fund
+UNION ALL
+SELECT
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+'massa_dagua' nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha_matopiba_es WHERE is_massadagua
+GROUP BY cd_uf, nm_cat_fund
+
+
 -- PARTE 1 : ADICIONANDO OS DADOS NO BANCO
 --- 1 ) DADO DE PCT (tonomapa)
 ---incluir dado no db
@@ -156,6 +186,15 @@ GROUP BY cd_mun, id_ffp
 select DISTINCT cd_mun from public.mun_territorios_matopiba
 
 
+--- número de pcts por estado
+select 
+count(DISTINCT id) as num,
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+fonte
+from public.mun_territorios_matopiba
+group by fonte, cd_uf
+
+
 --- calcular o raio-x fundiario dos municípios em que os territórios quilombolas estão
 
 DROP TABLE IF EXISTS public.territorios_categoriafundiaria; 
@@ -176,12 +215,45 @@ SELECT
 cd_mun,
 'massa_dagua' nm_cat_fund,
 sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
- FROM public.territorios_categoriafundiaria WHERE is_massadagua
+FROM public.territorios_categoriafundiaria WHERE is_massadagua
 GROUP BY cd_mun, nm_cat_fund)
 select 
+substring(cd_mun::text, 1, 2)::int as cd_uf,
 nm_cat_fund,
 sum(area_grupo_fundiario_ha) as area_final_ha
 from catfund_mun
-GROUP BY nm_cat_fund
+GROUP BY nm_cat_fund, cd_uf
+
+
+--- raio x fundiario por classe de pobleza
  
- 
+ select DISTINCT cd_mun, is_pobre 
+from public.sat_af_munipobres 
+WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) and cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopiba)
+
+
+WITH catfund_mun AS 
+(SELECT
+cd_mun,
+nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM public.territorios_categoriafundiaria WHERE NOT is_massadagua
+GROUP BY cd_mun, nm_cat_fund
+UNION ALL
+SELECT
+cd_mun,
+'massa_dagua' nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM public.territorios_categoriafundiaria WHERE is_massadagua
+GROUP BY cd_mun, nm_cat_fund)
+select 
+b.is_pobrev1,
+a.nm_cat_fund,
+sum(a.area_grupo_fundiario_ha) as area_final_ha
+from catfund_mun as a
+left join ( select distinct cd_mun, is_pobrev1 FROM public.sat_af_munipobres GROUP BY cd_mun, is_pobrev1 ) as b 
+on a.cd_mun=b.cd_mun
+GROUP BY a.nm_cat_fund, b.is_pobrev1
+
+
+select cd_mun, is_pobrev1 from public.sat_af_munipobres where cd_mun = 1702406
