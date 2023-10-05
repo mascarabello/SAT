@@ -23,13 +23,21 @@ DROP TABLE IF EXISTS public.tq_matopiba;
 CREATE TABLE public.tq_matopiba AS
 SELECT DISTINCT
 c.cod_tq,
-d.cd_mun
+d.cd_mun,
+ST_Area(ST_Intersection(ST_makevalid(c.geom),d.geom)) / ST_Area(ST_makevalid(c.geom)) as prop
 FROM (SELECT cod_tq, ST_MakeValid(ST_Union(geom)) geom  FROM public.cd2022_tquilombolas_esmatopiba_epsg4326 GROUP BY cod_tq) c	
-INNER JOIN (SELECT cd_mun, ST_MakeValid(geom) AS geom FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)) d
+INNER JOIN (SELECT cd_mun, ST_MakeValid(ST_Union(geom)) AS geom FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)) d
 ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
-WHERE ST_Area(ST_Intersection(ST_makevalid(c.geom),d.geom)) / ST_Area(ST_makevalid(c.geom)) > 0.10
-group by c.cod_tq, d.cd_mun
+group by c.cod_tq, d.cd_mun, prop
 
-
+with bar as (
+select 
+distinct cod_tq, cd_mun, sum(prop) as sumprop
+from public.tq_matopiba
+group by cod_tq, cd_mun)
+select distinct cod_tq, cd_mun 
+from bar 
+where sumprop > 0.20 
+group by cod_tq, cd_mun
 
 
