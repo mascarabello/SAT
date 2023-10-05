@@ -4,46 +4,78 @@
 
 -- Incluir dados [GDAL]
 -- ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Documents/GitHub/SAT/sat_classificacaoporaf.csv 
--- ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Documents/GitHub/SAT/sat_classificacaoporarea3cat.csv 
--- ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Documents/GitHub/SAT/sat_classificacaoporarea6cat.csv 
--- ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Documents/GitHub/SAT/sat_classificacaopormf.csv 
 
 
 -- AF-----
 select * from public.sat_classificacaoporaf
+
+select * from public.sat_classificacaoporaf where cod = '1718659'
+
 -- Filtrando a tabela de af
 DROP TABLE IF EXISTS public.sat_af_munipobres;
 CREATE TABLE public.sat_af_munipobres AS 
 SELECT 
 cast(cod as int) as cd_mun,
 cast(categoria as text) as categoria,
-sum(areadosestabelecimentos::float8) as area_estab
+sum(ndeprodutores::int) as nestab
 FROM public.sat_classificacaoporaf
 GROUP BY cd_mun, categoria
+
+select * from public.sat_af_munipobres where cd_mun = 1718659
+
 
 --- Calculando percentual de area 'pobre'
 ALTER TABLE public.sat_af_munipobres ADD COLUMN percpobre float8;
 UPDATE public.sat_af_munipobres as t
- SET percpobre = a.area_pobre/b.area_mun 
+ SET percpobre = a.nestab_pobre/b.nestab_mun 
  FROM (
-	 SELECT cd_mun, sum(area_estab) as area_mun 
+	 SELECT cd_mun, sum(nestab) as nestab_mun 
 	 FROM public.sat_af_munipobres 
 	 GROUP BY cd_mun) AS b
-   INNER JOIN ( SELECT cd_mun, sum(area_estab) as area_pobre 
+   INNER JOIN ( SELECT cd_mun, sum(nestab) as nestab_pobre 
 	 FROM public.sat_af_munipobres 
 	 WHERE categoria in ('pobre_cb','pobre_sb')
 	 GROUP BY cd_mun
  ) AS a ON a.cd_mun=b.cd_mun
 WHERE t.cd_mun=b.cd_mun
-order by T.cd_mun
 
+
+UPDATE public.sat_af_munipobres SET percpobre = 0  WHERE percpobre IS NULL
+
+
+ALTER TABLE public.sat_af_munipobres ADD COLUMN is_pobrev1 int;
+UPDATE public.sat_af_munipobres SET is_pobrev1 = 
+ CASE
+ WHEN percpobre < 0.33 THEN 1 -- moderada
+ WHEN (percpobre > 0.33 AND percpobre < 0.66) THEN 2 -- ALTA
+ WHEN percpobre > 0.66 THEN 3 -- MUITO ALTA 
+ ELSE 0
+ END
+
+-- NORMALIZAR O PERCPOBRE
+select max(percpobre) from public.sat_af_munipobres WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) -- 0.8481481481481481
+ALTER TABLE public.sat_af_munipobres ADD COLUMN percpobre_norm float;
+UPDATE public.sat_af_munipobres SET percpobre_norm = percpobre/0.8481481481481481 WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+
+
+
+select * from public.sat_af_munipobres where cd_mun = 2930600
 --- Identificando municipios 'pobres'
 ALTER TABLE public.sat_af_munipobres ADD COLUMN is_pobre int;
 UPDATE public.sat_af_munipobres SET is_pobre = 
  CASE
- WHEN percpobre > 0.50 THEN 1
+ WHEN percpobre_norm < 0.33 THEN 1 -- moderada
+ WHEN (percpobre_norm > 0.33 AND percpobre_norm < 0.66) THEN 2 -- ALTA
+ WHEN percpobre_norm > 0.66 THEN 3 -- MUITO ALTA 
  ELSE 0
  END
+ 
 
-select cd_mun, 'pobre_af' as classe from public.sat_af_munipobres WHERE is_pobre = 1
+-- selecionar os dados
+
+select DISTINCT cd_mun, is_pobre from public.sat_af_munipobres WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+
+select DISTINCT cd_mun, is_pobre 
+from public.sat_af_munipobres 
+WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) and cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopiba)
 
