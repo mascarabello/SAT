@@ -25,18 +25,32 @@ from public.poligonos_sat
 select * FROM dados_brutos.poligonos_sat
 Select St_srid(geom) from public.poligonos_sat
 
---- Quais pct estao localizados na regiao do MATOPIBA (alguma intersecção)
+--- Selecionar PCTs e seus respectivos municípios localizados nos estados da região do MATOPIBA (alguma intersecção)
 DROP TABLE IF EXISTS public.pct_matopiba; 
 CREATE TABLE public.pct_matopiba AS
 SELECT DISTINCT
-c.id_pct
-FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct) c	
-INNER JOIN (SELECT * FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)) d
+c.id_pct,
+d.cd_mun,
+ST_Area(ST_Intersection(ST_makevalid(c.geom),d.geom)) / ST_Area(ST_makevalid(c.geom)) as prop
+FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat WHERE out_segmen != 'Quilombolas' GROUP BY id_pct) c	
+INNER JOIN (SELECT cd_mun, ST_MakeValid(ST_Union(geom)) AS geom FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) GROUP BY cd_mun) d
 ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
-RIGHT JOIN public.lista_cdmun_matopiba e ON d.cd_mun = e.cd_mun
+group by c.id_pct, d.cd_mun, prop
 
+select DISTINCT id_pct, cd_mun FROM public.pct_matopiba where prop > 0.2
 
---- QUERY PARA SUMARIZAR CATEGORIA FUNDIÁRIA
+with bar as (
+select 
+distinct cod_tq, cd_mun, sum(prop) as sumprop
+from public.tq_matopiba
+group by cod_tq, cd_mun)
+select distinct cod_tq, cd_mun 
+from bar 
+where sumprop > 0.20 
+group by cod_tq, cd_mun
+
+--- QUERY PARA SUMARIZAR CATEGORIA FUNDIÁRIA -- removendo os pct de quilombola
+
 DROP TABLE IF EXISTS public.pct_categoriafundiaria; 
 CREATE TABLE public.pct_categoriafundiaria AS
 WITH catfund_pctbr AS 
@@ -44,7 +58,7 @@ WITH catfund_pctbr AS
 a.id_pct,
 b.nm_cat_fund,
 sum(ST_Area(ST_intersection(a.geom, b.geom)::geography)/10000) area_grupo_fundiario_ha
-FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct) a	
+FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat WHERE out_segmen != 'Quilombolas' GROUP BY id_pct) a	
 INNER JOIN (SELECT * FROM malhav2.proc6_malha WHERE NOT is_massadagua) b
 ON  ST_Intersects(ST_makevalid(a.geom), b.geom)
 GROUP BY a.id_pct, b.nm_cat_fund
@@ -53,7 +67,7 @@ SELECT
 c.id_pct,
 'massa_dagua' nm_cat_fund,
 sum(ST_Area(ST_intersection(c.geom, d.geom)::geography)/10000) area_grupo_fundiario_ha
-FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct) c	
+FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat WHERE out_segmen != 'Quilombolas' GROUP BY id_pct) c
 INNER JOIN (SELECT * FROM malhav2.proc6_malha WHERE is_massadagua) d
 ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
 GROUP BY c.id_pct, d.nm_cat_fund)
@@ -64,13 +78,22 @@ area_grupo_fundiario_ha
 FROM catfund_pctbr
 WHERE id_pct in (SELECT id_pct FROM public.pct_matopiba )
 
+select * FROM public.pct_categoriafundiaria
 
 --- AREA DE CADA PCT
 SELECT
 d.id_pct,
+d.out_munici, 
+d.out_nome,
+d.out_estado, 
+d.out_segmen, 
 'area_pct' nm_cat_fund,
 sum(ST_Area((d.geom)::geography)/10000) area_grupo_fundiario_ha
-FROM (SELECT id_pct, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct) as d
+FROM (SELECT id_pct, out_nome, out_munici, out_estado, out_segmen, ST_MakeValid(ST_Union(geom)) geom  FROM dados_brutos.poligonos_sat GROUP BY id_pct, out_nome, out_munici, out_estado, out_segmen ) as d
 WHERE d.id_pct in (SELECT id_pct FROM public.pct_categoriafundiaria )
-GROUP BY d.id_pct
+GROUP BY d.id_pct, d.out_nome, d.out_munici, d.out_estado, d.out_segmen
+ORDER BY d.id_pct
+
+
+SELECT * FROM dados_brutos.poligonos_sat limit 10
 
