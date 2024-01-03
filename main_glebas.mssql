@@ -1,0 +1,34 @@
+--- dado para NAILA 
+--- área de gleba pública
+
+WITH catfund_mun AS 
+(SELECT
+cd_mun,
+nm_cat_fund,
+is_gleba,
+is_gleba_fed,
+is_gleba_est,
+sum(ST_Area((ST_MakeValid(geom))::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha WHERE NOT is_massadagua and substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+GROUP BY cd_mun, nm_cat_fund, is_gleba, is_gleba_fed, is_gleba_est
+UNION ALL
+SELECT
+cd_mun,
+'massa_dagua' nm_cat_fund,
+is_gleba,
+is_gleba_fed,
+is_gleba_est,
+sum(ST_Area((ST_MakeValid(geom))::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha WHERE is_massadagua and substring(cd_mun::text, 1, 2)::int in (21,17,22,29)  
+GROUP BY cd_mun, nm_cat_fund, is_gleba, is_gleba_fed, is_gleba_est)
+select 
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+is_gleba,
+is_gleba_fed,
+is_gleba_est,
+sum(area_grupo_fundiario_ha) as area_ha
+from catfund_mun
+where nm_cat_fund = 'gleba_publica'
+GROUP BY cd_uf, is_gleba, is_gleba_fed, is_gleba_est
+
+select * from malhav2.proc6_malha limit 10
