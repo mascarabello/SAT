@@ -1,13 +1,13 @@
 -- AJUSTES INICIAIS
 
 ---incluir dado no db
---ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Dropbox/Work/GPP/SAT/cd2022_tquilombolas_esmatopiba_epsg4326.shp -nlt MULTIPOLYGON -lco precision=YES
+--ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Dropbox/Work/GPP/SAT/input/cd2022_tquilombolas_esmatopiba_saovicente.shp -nlt MULTIPOLYGON -lco precision=YES
 
 
 -- Identificar qual é a projeção do dado
-Select St_srid(wkb_geometry) from public.cd2022_tquilombolas_esmatopiba_epsg4326
+Select St_srid(wkb_geometry) from public.cd2022_tquilombolas_esmatopiba_saovicente
 
-Select * from public.cd2022_tquilombolas_esmatopiba_epsg4326 limit 10
+Select * from public.cd2022_tquilombolas_esmatopiba_saovicente limit 10
 Select distinct sg_uf from public.cd2022_tquilombolas_esmatopiba_epsg4326
 
 -- Eu já transformei a projeção do dado para EPSG: 4326 e 
