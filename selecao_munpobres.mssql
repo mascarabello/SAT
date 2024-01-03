@@ -52,6 +52,13 @@ UPDATE public.sat_af_munipobres SET is_pobrev1 =
  ELSE 0
  END
 
+
+select * 
+from public.sat_af_munipobres 
+WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+ORDER BY is_pobrev1 asc
+
+
 -- NORMALIZAR O PERCPOBRE
 select max(percpobre) from public.sat_af_munipobres WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) -- 0.8481481481481481
 ALTER TABLE public.sat_af_munipobres ADD COLUMN percpobre_norm float;
@@ -73,9 +80,9 @@ UPDATE public.sat_af_munipobres SET is_pobre =
 
 -- selecionar os dados
 
-select DISTINCT cd_mun, is_pobre from public.sat_af_munipobres WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+select DISTINCT cd_mun, is_pobrev1 from public.sat_af_munipobres WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
 
-select DISTINCT cd_mun, is_pobre 
+select DISTINCT cd_mun, is_pobrev1 
 from public.sat_af_munipobres 
-WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) and cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopiba)
+WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) and cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopibav1)
 
