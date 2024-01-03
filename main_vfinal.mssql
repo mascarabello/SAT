@@ -58,23 +58,18 @@ Select St_srid(geom) from public.poligonos_sat
 
 ---- 2) TERRITORIOS QUILOMBOLAS (FONTE : CENSO 2022) 
 ---incluir dado no db
---ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Dropbox/Work/GPP/SAT/cd2022_tquilombolas_esmatopiba_epsg4326.shp -nlt MULTIPOLYGON -lco precision=YES
+--ogr2ogr -f PostgreSQL "PG:host=34.71.4.88 user=postgres dbname=malha_fundiaria port=5433 password=gpp-es@lq" /Users/marlucescarabello/Dropbox/Work/GPP/SAT/input/cd2022_tquilombolas_esmatopiba_saovicente.shp -nlt MULTIPOLYGON -lco precision=YES
 
 -- Identificar qual é a projeção do dado
-Select St_srid(wkb_geometry) from public.cd2022_tquilombolas_esmatopiba_epsg4326
+Select St_srid(wkb_geometry) from public.cd2022_tquilombolas_esmatopiba_saovicente
 
-Select * from public.cd2022_tquilombolas_esmatopiba_epsg4326 limit 10
-Select distinct sg_uf from public.cd2022_tquilombolas_esmatopiba_epsg4326
+Select * from public.cd2022_tquilombolas_esmatopiba_saovicente limit 10
+Select distinct sg_uf from public.cd2022_tquilombolas_esmatopiba_saovicente
 
 -- Eu já transformei a projeção do dado para EPSG: 4326 e 
 -- agora estou apenas mudando o nome da coluna wkb_geometry
-ALTER TABLE public.cd2022_tquilombolas_esmatopiba_epsg4326 RENAME  wkb_geometry TO geom;
-Select St_srid(geom) from public.cd2022_tquilombolas_esmatopiba_epsg4326
-
--- Alterando o nome da coluna id
-ALTER TABLE public.cd2022_tquilombolas_esmatopiba_epsg4326 RENAME  id TO id_pct;
-
-
+ALTER TABLE public.cd2022_tquilombolas_esmatopiba_saovicente RENAME  wkb_geometry TO geom;
+Select St_srid(geom) from public.cd2022_tquilombolas_esmatopiba_saovicente
 
 
 --- 3) FUNDO E FECHO DE PASTO
@@ -142,7 +137,7 @@ SELECT DISTINCT
 c.cod_tq,
 d.cd_mun,
 ST_Area(ST_Intersection(ST_makevalid(c.geom),d.geom)) / ST_Area(ST_makevalid(c.geom)) as prop
-FROM (SELECT cod_tq, ST_MakeValid(ST_Union(geom)) geom  FROM public.cd2022_tquilombolas_esmatopiba_epsg4326 GROUP BY cod_tq) c	
+FROM (SELECT cod_tq, ST_MakeValid(ST_Union(geom)) geom  FROM public.cd2022_tquilombolas_esmatopiba_saovicente GROUP BY cod_tq) c	
 INNER JOIN (SELECT cd_mun, ST_MakeValid(ST_Union(geom)) AS geom FROM malhav2.proc6_malha WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) group by cd_mun) d
 ON  ST_Intersects(ST_makevalid(c.geom), d.geom)
 group by c.cod_tq, d.cd_mun, prop
@@ -164,8 +159,8 @@ select * from public.pct_matopiba
 select * from public.tq_matopiba  limit 10
 
 
-DROP TABLE IF EXISTS public.mun_territorios_matopiba; 
-CREATE TABLE public.mun_territorios_matopiba AS
+DROP TABLE IF EXISTS public.mun_territorios_matopibav1; 
+CREATE TABLE public.mun_territorios_matopibav1 AS
 SELECT DISTINCT cd_mun, id_pct::int AS id, 'pct' AS fonte
 FROM public.pct_matopiba 
 WHERE prop > 0.20
@@ -183,7 +178,7 @@ FROM public.ffp_matopiba
 GROUP BY cd_mun, id_ffp
 
 
-select DISTINCT cd_mun from public.mun_territorios_matopiba
+select DISTINCT cd_mun from public.mun_territorios_matopibav1
 
 
 --- número de pcts por estado
@@ -191,7 +186,7 @@ select
 count(DISTINCT id) as num,
 substring(cd_mun::text, 1, 2)::int as cd_uf,
 fonte
-from public.mun_territorios_matopiba
+from public.mun_territorios_matopibav1
 group by fonte, cd_uf
 
 
@@ -201,7 +196,7 @@ DROP TABLE IF EXISTS public.territorios_categoriafundiaria;
 CREATE TABLE public.territorios_categoriafundiaria AS
 select * 
 FROM malhav2.proc6_malha
-WHERE cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopiba)
+WHERE cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopibav1)
 
 WITH catfund_mun AS 
 (SELECT
@@ -227,23 +222,23 @@ GROUP BY nm_cat_fund, cd_uf
 
 --- raio x fundiario por classe de pobleza
  
- select DISTINCT cd_mun, is_pobre 
+select DISTINCT cd_mun, is_pobre 
 from public.sat_af_munipobres 
-WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) and cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopiba)
+WHERE substring(cd_mun::text, 1, 2)::int in (21,17,22,29) and cd_mun in (SELECT distinct cd_mun FROM public.mun_territorios_matopibav1)
 
-
+--- municípios selecionados
 WITH catfund_mun AS 
 (SELECT
 cd_mun,
 nm_cat_fund,
-sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+sum(ST_Area((ST_MakeValid(geom))::geography)/10000) area_grupo_fundiario_ha
 FROM public.territorios_categoriafundiaria WHERE NOT is_massadagua
 GROUP BY cd_mun, nm_cat_fund
 UNION ALL
 SELECT
 cd_mun,
 'massa_dagua' nm_cat_fund,
-sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+sum(ST_Area((ST_MakeValid(geom))::geography)/10000) area_grupo_fundiario_ha
 FROM public.territorios_categoriafundiaria WHERE is_massadagua
 GROUP BY cd_mun, nm_cat_fund)
 select 
@@ -255,5 +250,93 @@ left join ( select distinct cd_mun, is_pobrev1 FROM public.sat_af_munipobres GRO
 on a.cd_mun=b.cd_mun
 GROUP BY a.nm_cat_fund, b.is_pobrev1
 
+--- todos
+WITH catfund_mun AS 
+(SELECT
+cd_mun,
+nm_cat_fund,
+sum(ST_Area((ST_MakeValid(geom))::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha WHERE NOT is_massadagua and substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+GROUP BY cd_mun, nm_cat_fund
+UNION ALL
+SELECT
+cd_mun,
+'massa_dagua' nm_cat_fund,
+sum(ST_Area((ST_MakeValid(geom))::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha WHERE is_massadagua and substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+GROUP BY cd_mun, nm_cat_fund)
+select 
+b.is_pobrev1,
+a.nm_cat_fund,
+sum(a.area_grupo_fundiario_ha) as area_final_ha
+from catfund_mun as a
+left join ( select distinct cd_mun, is_pobrev1 FROM public.sat_af_munipobres where substring(cd_mun::text, 1, 2)::int in (21,17,22,29) GROUP BY cd_mun, is_pobrev1) as b 
+on a.cd_mun=b.cd_mun
+GROUP BY a.nm_cat_fund, b.is_pobrev1
+
+
+---estado
+WITH catfund_mun AS 
+(SELECT
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+cd_mun,
+nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM public.territorios_categoriafundiaria WHERE NOT is_massadagua
+GROUP BY cd_uf, cd_mun, nm_cat_fund
+UNION ALL
+SELECT
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+cd_mun,
+'massa_dagua' nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM public.territorios_categoriafundiaria WHERE is_massadagua
+GROUP BY cd_uf, cd_mun, nm_cat_fund)
+select 
+a.cd_uf,
+b.is_pobrev1,
+a.nm_cat_fund,
+sum(a.area_grupo_fundiario_ha) as area_final_ha
+from catfund_mun as a
+left join ( select distinct cd_mun, is_pobrev1 FROM public.sat_af_munipobres GROUP BY cd_mun, is_pobrev1 ) as b 
+on a.cd_mun=b.cd_mun
+GROUP BY a.cd_uf, a.nm_cat_fund, b.is_pobrev1
+
+
+
+--- Malha fundiária dos municípios que Naila pediu
+-- 1707405  - Esperantina - TO
+-- 1702208  - Araguatins – TO
+-- 2909901 -  Curaça – BA
+
+
+WITH catfund_mun AS 
+(SELECT
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+cd_mun,
+nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha WHERE NOT is_massadagua and substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+GROUP BY cd_uf, cd_mun, nm_cat_fund
+UNION ALL
+SELECT
+substring(cd_mun::text, 1, 2)::int as cd_uf,
+cd_mun,
+'massa_dagua' nm_cat_fund,
+sum(ST_Area((geom)::geography)/10000) area_grupo_fundiario_ha
+FROM malhav2.proc6_malha WHERE is_massadagua and substring(cd_mun::text, 1, 2)::int in (21,17,22,29)
+GROUP BY cd_uf, cd_mun, nm_cat_fund)
+select 
+a.cd_mun,
+a.nm_cat_fund,
+sum(a.area_grupo_fundiario_ha) as area_final_ha
+from catfund_mun as a
+where a.cd_mun in (1707405,1702208,2909901)
+GROUP BY a.cd_mun, a.nm_cat_fund
+
 
 select cd_mun, is_pobrev1 from public.sat_af_munipobres where cd_mun = 1702406
+
+--- numero de municípios
+
+SELECT distinct cd_mun FROM public.mun_territorios_matopiba
